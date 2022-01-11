@@ -1,0 +1,7 @@
+telegram:
+  token: "000:XXX-YYY"
+  group_id: "-111"
+logger:
+  level: "debug"
+  encoding: "console"
+  development: true

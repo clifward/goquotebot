@@ -1,0 +1,15 @@
+services:
+  goquote:
+    build:
+      context: .
+    container_name: quote-bot
+
+    ports:
+      - 8080:8080
+    volumes:
+      - quote_db:/home/pi/Goquotebot/sqlite/
+      - ${PWD}/config.yaml:/home/pi/Goquotebot/goquotebot/config.yaml
+        
+
+volumes:
+  quote_db:
