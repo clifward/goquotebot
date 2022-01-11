@@ -1,0 +1,7 @@
+{{ range . }}
+#Q{{ .QuoteID }} ({{ if ge .Votes 0 }}+{{ end }}{{ .Votes }})
+*{{ .Content }}*
+
+_by {{ .QuoteContext }}_
+\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_
+{{ end }}
