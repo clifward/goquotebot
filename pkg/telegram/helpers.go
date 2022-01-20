@@ -2,10 +2,11 @@ package telegram
 
 import (
 	"bytes"
+	"embed"
 	"errors"
 	"fmt"
 	"goquotebot/pkg/storages"
-	"os"
+	"io/fs"
 	"regexp"
 	"strconv"
 	"strings"
@@ -22,18 +23,12 @@ var (
 	regexCmdNumber              *regexp.Regexp
 	regexSearchExpressionNumber *regexp.Regexp
 
-	templateQuoteDeleted *template.Template
-	templateVoteAdded    *template.Template
-	templateVoteRemoved  *template.Template
-	templateQuoteAdded   *template.Template
-	templateQuotes       *template.Template
+	templates map[string]*template.Template
+	//go:embed templates/*
+	files embed.FS
 )
 
 func init() {
-	templatePath, err := localizeTemplate()
-	if err != nil {
-		panic(err)
-	}
 
 	regexAddQuote = regexp.MustCompile(`^\/[a-zA-Z]{1,}\s{1,}(\S.+?)\s{0,}\|\s{0,}(\S.+?)\s{0,}$`)
 	regexQuotesIDs = regexp.MustCompile(`(^|\s)#Q{0,}([0-9]{1,})\b`)
@@ -41,31 +36,36 @@ func init() {
 	//regexSearchExpressionNumber = regexp.MustCompile(`^\/[a-zA-Z]{1,}\s{1,}(.+?)\s{0,}(\d{0,})\s{0,}$`)
 	regexSearchExpressionNumber = regexp.MustCompile(`^\/[a-zA-Z]{1,}\s{1,}(.+?)(\s{1,}(\d{1,})|$)`)
 
-	templateQuoteDeleted = template.Must(template.New("quote_deleted.tmpl").ParseFiles(fmt.Sprintf("%squote_deleted.tmpl", templatePath)))
-	templateVoteAdded = template.Must(template.New("vote_added.tmpl").ParseFiles(fmt.Sprintf("%svote_added.tmpl", templatePath)))
-	templateVoteRemoved = template.Must(template.New("vote_removed.tmpl").ParseFiles(fmt.Sprintf("%svote_removed.tmpl", templatePath)))
-	templateQuoteAdded = template.Must(template.New("quote_added.tmpl").ParseFiles(fmt.Sprintf("%squote_added.tmpl", templatePath)))
-	templateQuotes = template.Must(template.New("quotes.tmpl").ParseFiles(fmt.Sprintf("%squotes.tmpl", templatePath)))
+	templates = make(map[string]*template.Template)
+	err := LoadTemplates("templates", "/*.tmpl")
+	if err != nil {
+		panic(err)
+	}
 
 }
 
-func localizeTemplate() (string, error) {
-	pathsToTry := []string{"pkg/telegram/templates/", "../../pkg/telegram/templates/"}
-	for _, path := range pathsToTry {
-		file := fmt.Sprintf("%squote_deleted.tmpl", path)
-		if fileExists(file) {
-			return path, nil
+func LoadTemplates(templatesDir string, extension string) error {
+	tmplFiles, err := fs.ReadDir(files, "templates")
+	if err != nil {
+		fmt.Println("can't read templates dir")
+		return err
+	}
+
+	for _, tmpl := range tmplFiles {
+		if tmpl.IsDir() {
+			continue
 		}
-	}
-	return "", errors.New("templates not found")
-}
 
-func fileExists(filename string) bool {
-	info, err := os.Stat(filename)
-	if os.IsNotExist(err) {
-		return false
+		pt, err := template.ParseFS(files, templatesDir+"/"+tmpl.Name())
+		if err != nil {
+			return err
+		}
+
+		templates[tmpl.Name()] = pt
+
 	}
-	return !info.IsDir()
+
+	return err
 }
 
 func ExtractExpressionAndNumber(t string) storages.SearchExpressionRequest {
@@ -148,7 +148,7 @@ func GenerateQuotesMessage(quotes []storages.QuoteResponse) (string, error) {
 	}
 
 	var buf bytes.Buffer
-	err := templateQuotes.Execute(&buf, quotes)
+	err := templates["quotes.tmpl"].Execute(&buf, quotes)
 	if err != nil {
 		return "", err
 	}
@@ -158,7 +158,7 @@ func GenerateQuotesMessage(quotes []storages.QuoteResponse) (string, error) {
 
 func GenerateNewQuoteMessage(quote storages.AddQuoteRequest) (string, error) {
 	var buf bytes.Buffer
-	err := templateQuoteAdded.Execute(&buf, quote)
+	err := templates["quote_added.tmpl"].Execute(&buf, quote)
 	if err != nil {
 		return "", err
 	}
@@ -167,7 +167,7 @@ func GenerateNewQuoteMessage(quote storages.AddQuoteRequest) (string, error) {
 
 func GenerateDeleteQuoteMessage(quote storages.UniqueSpecifiedQuoteRequest) (string, error) {
 	var buf bytes.Buffer
-	err := templateQuoteDeleted.Execute(&buf, quote)
+	err := templates["quote_deleted.tmpl"].Execute(&buf, quote)
 	if err != nil {
 		return "", err
 	}
@@ -176,7 +176,7 @@ func GenerateDeleteQuoteMessage(quote storages.UniqueSpecifiedQuoteRequest) (str
 
 func GenerateVoteAddedMessage(vote storages.VoteQuoteRequest) (string, error) {
 	var buf bytes.Buffer
-	err := templateVoteAdded.Execute(&buf, vote)
+	err := templates["vote_added.tmpl"].Execute(&buf, vote)
 	if err != nil {
 		return "", err
 	}
@@ -185,7 +185,7 @@ func GenerateVoteAddedMessage(vote storages.VoteQuoteRequest) (string, error) {
 
 func GenerateVoteRemovedMessage(vote storages.VoteQuoteRequest) (string, error) {
 	var buf bytes.Buffer
-	err := templateVoteRemoved.Execute(&buf, vote)
+	err := templates["vote_removed.tmpl"].Execute(&buf, vote)
 	if err != nil {
 		return "", err
 	}
